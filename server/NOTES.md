@@ -8,6 +8,10 @@
 - [x] **Step 4** — Receive data → append `/var/tmp/aesdsocketdata` on newline
 - [x] **Step 5** — Send full file back to client after each complete packet
 - [x] **Step 6** — Signal handler (SIGINT/SIGTERM) → syslog, cleanup, exit
+- [x] **Step 7** — Daemon mode via `-d` argument (fork after bind)
+- [x] **Step 8** — `sockettest.sh` verified on restart (clean state confirmed)
+- [x] **Step 9** — `full-test.sh` passes: `Test of assignment assignment5 complete with success`
+- [x] **Step 10** — Tagged `assignment-5-complete` and pushed
 
 ---
 
@@ -153,6 +157,31 @@ echo "hello world" | nc localhost 9000
 cat /var/tmp/aesdsocketdata
 ```
 
+## Daemon Mode (-d flag)
+
+Fork happens **after** successful `bind()` — parent sees bind errors before exiting.
+
+```bash
+# Start as daemon
+sudo ./aesdsocket -d
+
+# Verify running
+ps aux | grep aesdsocket
+
+# Stop
+sudo pkill aesdsocket
+```
+
+| Daemonize step | Why |
+|----------------|-----|
+| `fork()` + parent `exit()` | Shell gets prompt back; child orphaned to init |
+| `setsid()` | New session leader — detached from terminal, can't receive terminal signals |
+| `dup2(..., /dev/null)` | Prevents accidental terminal read/write |
+| `chdir("/")` | Stops daemon holding a mount point open |
+| Fork **after** bind | Parent sees bind errors before exiting — no silent failures |
+
+---
+
 ## Verification — sockettest.sh (Step 4)
 
 Run each time server is closed and restarted to prove clean state on exit.
@@ -172,3 +201,23 @@ sudo bash assignment-autotest/test/assignment5/sockettest.sh
 **Result:** `Tests complete with success!` on every run. ✓
 
 **Why it works across restarts:** SIGINT triggers `remove(DATA_FILE)` in signal handler. Each fresh server start has no stale data — sockettest.sh assumes clean state, so it passes repeatably.
+
+---
+
+## Full Test Result
+
+```bash
+sudo bash full-test.sh
+# → Test of assignment assignment5 complete with success
+```
+
+---
+
+## Assignment Completion
+
+Tagged and pushed:
+
+```bash
+git tag assignment-5-complete
+git push && git push origin assignment-5-complete
+```
