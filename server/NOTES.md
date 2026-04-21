@@ -152,3 +152,23 @@ echo "hello world" | nc localhost 9000
 # Check file
 cat /var/tmp/aesdsocketdata
 ```
+
+## Verification — sockettest.sh (Step 4)
+
+Run each time server is closed and restarted to prove clean state on exit.
+
+**Terminal 1:**
+```bash
+cd server && make && sudo ./aesdsocket
+# Ctrl+C to stop → signal handler deletes /var/tmp/aesdsocketdata
+# Restart: sudo ./aesdsocket
+```
+
+**Terminal 2:**
+```bash
+sudo bash assignment-autotest/test/assignment5/sockettest.sh
+```
+
+**Result:** `Tests complete with success!` on every run. ✓
+
+**Why it works across restarts:** SIGINT triggers `remove(DATA_FILE)` in signal handler. Each fresh server start has no stale data — sockettest.sh assumes clean state, so it passes repeatably.
