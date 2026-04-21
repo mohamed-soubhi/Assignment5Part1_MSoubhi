@@ -3,7 +3,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <syslog.h>
@@ -149,15 +151,60 @@ static void handle_client(int fd, const char *ip)
 }
 
 /* ------------------------------------------------------------------ */
+/* Daemonize: fork after bind so parent can report bind errors        */
+/* ------------------------------------------------------------------ */
+static int daemonize(void)
+{
+    pid_t pid = fork();
+    if (pid < 0) {
+        syslog(LOG_ERR, "fork: %s", strerror(errno));
+        return -1;
+    }
+    if (pid > 0)
+        exit(EXIT_SUCCESS); /* parent exits cleanly */
+
+    /* Child: become session leader, detach from terminal */
+    if (setsid() < 0) {
+        syslog(LOG_ERR, "setsid: %s", strerror(errno));
+        return -1;
+    }
+
+    /* Redirect stdin/stdout/stderr to /dev/null */
+    int devnull = open("/dev/null", O_RDWR);
+    if (devnull >= 0) {
+        dup2(devnull, STDIN_FILENO);
+        dup2(devnull, STDOUT_FILENO);
+        dup2(devnull, STDERR_FILENO);
+        if (devnull > STDERR_FILENO)
+            close(devnull);
+    }
+
+    chdir("/");
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
 /* main                                                                */
 /* ------------------------------------------------------------------ */
-int main(void)
+int main(int argc, char *argv[])
 {
+    int daemon_mode = 0;
+
+    if (argc == 2 && strcmp(argv[1], "-d") == 0)
+        daemon_mode = 1;
+
     openlog("aesdsocket", LOG_PID | LOG_CONS, LOG_USER);
     setup_signals();
 
     server_fd = create_server_socket();
     if (server_fd < 0) {
+        closelog();
+        return -1;
+    }
+
+    /* Fork only after successful bind — parent knows port is claimed */
+    if (daemon_mode && daemonize() < 0) {
+        close(server_fd);
         closelog();
         return -1;
     }
